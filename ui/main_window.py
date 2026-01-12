@@ -2,26 +2,20 @@
 import threading
 import time
 from PySide6 import QtCore, QtWidgets, QtGui
-from PySide6.QtWidgets import QTextEdit, QLabel
-
+from PySide6.QtWidgets import QTextEdit, QMenu, QAction, QLineEdit, QPushButton, QFrame, QHBoxLayout, QVBoxLayout, QMessageBox, QLabel
 from core.engine.engine import Engine
 from ui.overlay import Overlay
 from ui.panels.skill_list import SkillListPanel
 from ui.widgets.skill_editor import SkillEditor
 from core.config import save_config, load_config
 from core.models.skill import SkillAction
+from ui.constants import (
+    APP_TITLE, LABEL_ADD_SKILL, PLACEHOLDER_NAME, PLACEHOLDER_KEY, PLACEHOLDER_DELAY,
+    BTN_ADD, BTN_EDIT, BTN_SAVE, BTN_CANCEL, BTN_START, BTN_STOP,
+    STATUS_READY, STATUS_RUNNING, COLOR_PRIMARY, COLOR_FAIL
+)
 
-# 尝试从 ui.constants 或 根模块 constants 导入配色与标题，若失败则使用回退值，避免 NameError
-try:
-    from ui.constants import COLOR_TEXT_SUB, APP_TITLE
-except Exception:
-    try:
-        from constants import COLOR_TEXT_SUB, APP_TITLE
-    except Exception:
-        COLOR_TEXT_SUB = "#9AA0A6"          # 次要文本颜色（回退）
-        APP_TITLE = "GW2 Director Pro"      # 窗口标题回退
-
-# 尝试导入 ModernButton 与相关常量，若缺失则提供回退实现以避免 NameError 崩溃
+# 尝试导入 ModernButton 与相关常量，若缺失则提供回退实现以避免 NameError
 try:
 	from ui.widgets.modern import ModernButton
 except Exception:
@@ -42,28 +36,6 @@ except Exception:
 					self.setStyleSheet(f"background-color: {color}; color: #FFFFFF; border-radius: 8px; padding: 6px 14px;")
 				else:
 					self.setStyleSheet("background-color: #2C2C2E; color: #EDEDED; border-radius: 8px; padding: 6px 14px;")
-
-# 尝试导入按钮文本与颜色常量，若缺失则使用回退值
-try:
-    from ui.constants import (
-        BTN_CALIBRATE, BTN_START, BTN_VALIDATE, BTN_STOP,
-        COLOR_FAIL, COLOR_PRIMARY, COLOR_TEXT_SUB, APP_TITLE
-    )
-except Exception:
-    try:
-        from constants import (
-            BTN_CALIBRATE, BTN_START, BTN_VALIDATE, BTN_STOP,
-            COLOR_FAIL, COLOR_PRIMARY, COLOR_TEXT_SUB, APP_TITLE
-        )
-    except Exception:
-        BTN_CALIBRATE = "Calibrate"
-        BTN_START = "Start"
-        BTN_VALIDATE = "Validate"
-        BTN_STOP = "Stop"
-        COLOR_FAIL = "#FF453A"
-        COLOR_PRIMARY = "#0A84FF"
-        COLOR_TEXT_SUB = "#9AA0A6"
-        APP_TITLE = "GW2 Director Pro"
 
 class UiBridge(QtCore.QObject):
     """UI 线程桥接器"""
@@ -255,8 +227,137 @@ class MainWindow(QtWidgets.QMainWindow):
         
         right_l.addWidget(content_area, 1)
 
-        # 初始化刷新
-        self._refresh_list()
+        # --- 新增右下角 "新增技能" 面板（名称/按键/延迟 + 添加按钮） ---
+		self.add_panel = QFrame(self)
+		self.add_panel.setObjectName("addPanel")
+		add_layout = QHBoxLayout(self.add_panel)
+		add_layout.setContentsMargins(8, 6, 8, 6)
+		add_layout.setSpacing(8)
+
+		self.input_new_name = QLineEdit()
+		self.input_new_name.setPlaceholderText(PLACEHOLDER_NAME)
+		self.input_new_key = QLineEdit()
+		self.input_new_key.setPlaceholderText(PLACEHOLDER_KEY)
+		self.input_new_delay = QLineEdit()
+		self.input_new_delay.setPlaceholderText(PLACEHOLDER_DELAY)
+
+		self.btn_add_skill = QPushButton(BTN_ADD)
+		self.btn_add_skill.setObjectName("btnAddSkill")
+		self.btn_add_skill.clicked.connect(self._on_add_skill)
+
+		add_layout.addWidget(QLabel(LABEL_ADD_SKILL))
+		add_layout.addWidget(self.input_new_name)
+		add_layout.addWidget(self.input_new_key)
+		add_layout.addWidget(self.input_new_delay)
+		add_layout.addWidget(self.btn_add_skill)
+
+		# 放置到窗口右下：优先尝试 statusBar（若为 QMainWindow），否则尝试加入主布局的末尾并靠右对齐
+		if hasattr(self, "statusBar"):
+			try:
+				self.statusBar().addPermanentWidget(self.add_panel)
+			except Exception:
+				try:
+					self.layout().addWidget(self.add_panel, alignment=Qt.AlignRight | Qt.AlignBottom)
+				except Exception:
+					self.add_panel.setParent(self)
+					self.add_panel.show()
+		else:
+			try:
+				self.layout().addWidget(self.add_panel, alignment=Qt.AlignRight | Qt.AlignBottom)
+			except Exception:
+				self.add_panel.setParent(self)
+				self.add_panel.show()
+
+		# 右上区域会响应右键弹出新增菜单（本类统一处理 contextMenuEvent）
+		# ...existing code...
+
+	# 右键菜单：当鼠标右键在窗口右上角区域时显示“新增技能”
+	def contextMenuEvent(self, event):
+		# 右上区域右键弹出菜单（新增技能）
+		pos = event.pos()
+		# 右上触发区域：宽度 - 380 到右边界，顶部 0..140
+		if pos.x() >= max(0, self.width() - 380) and pos.y() <= 140:
+			menu = QMenu(self)
+			act_add = QAction("新增技能", self)
+			act_add.triggered.connect(self._focus_add_skill_inputs)
+			menu.addAction(act_add)
+			menu.exec(event.globalPos())
+		else:
+			super().contextMenuEvent(event)
+
+	def _focus_add_skill_inputs(self):
+		# 把焦点移动到新增技能输入框，便于用户填写
+		try:
+			self.input_new_name.setFocus()
+			self.input_new_name.selectAll()
+		except Exception:
+			pass
+
+	def _on_add_skill(self):
+		# 验证输入并将新技能加入当前 profile，持久化并刷新界面
+		name = (self.input_new_name.text() or "").strip()
+		key = (self.input_new_key.text() or "").strip()
+		delay_text = (self.input_new_delay.text() or "").strip()
+
+		if not name:
+			QMessageBox.warning(self, "错误", "请填写技能名称。")
+			return
+		if not key:
+			QMessageBox.warning(self, "错误", "请填写按键。")
+			return
+		try:
+			delay = int(delay_text or 0)
+		except ValueError:
+			QMessageBox.warning(self, "错误", "延迟需为整数（毫秒）。")
+			return
+
+		# 确保加载了 profiles/global_coords
+		if not hasattr(self, "profiles") or not hasattr(self, "global_coords"):
+			gc, pr = load_config()
+			self.global_coords = gc
+			self.profiles = pr
+
+		profile_name = getattr(self, "current_profile", None) or next(iter(self.profiles), None)
+		if profile_name is None:
+			# 创建默认 profile
+			profile_name = "Default"
+			self.profiles[profile_name] = []
+
+		# 构造 SkillAction 并追加
+		new_skill_data = {
+			"name": name,
+			"key": key,
+			"delay": delay,
+			"cx": 0,
+			"cy": 0,
+			"p11x": 0,
+			"p11y": 0
+		}
+		try:
+			s = SkillAction.from_dict(new_skill_data)
+		except Exception:
+			# 回退：如果 SkillAction.from_dict 不可用，保存为 dict
+			s = new_skill_data
+
+		self.profiles.setdefault(profile_name, []).append(s)
+
+		# 持久化
+		try:
+			save_config("config.json", self.global_coords, self.profiles)
+		except Exception as e:
+			print("保存配置失败:", e)
+			QMessageBox.warning(self, "错误", "保存配置失败，请检查日志。")
+			return
+
+		# 清空输入，刷新列表，并给出提示
+		self.input_new_name.clear()
+		self.input_new_key.clear()
+		self.input_new_delay.clear()
+		QMessageBox.information(self, "已添加", f"已向配置文件 '{profile_name}' 添加技能：{name}")
+		try:
+			self._refresh_list()
+		except Exception:
+			pass
 
     # --- 逻辑控制 ---
     @QtCore.Slot(dict)
@@ -299,7 +400,8 @@ class MainWindow(QtWidgets.QMainWindow):
     def _refresh_list(self):
         skills = self.engine.get_current_skills()
         # 绑定点击事件：点击卡片 -> 编辑器显示
-        self.skill_list_panel.set_skills(skills, self._open_skill_editor)
+        # 传入编辑回调与删除回调
+        self.skill_list_panel.set_skills(skills, self._open_skill_editor, self._on_skill_deleted)
 
     @QtCore.Slot(list)
     def _on_snapshot(self, _):
@@ -397,4 +499,80 @@ class MainWindow(QtWidgets.QMainWindow):
                 save_config("config.json", self.global_coords, self.profiles)
             except Exception as e:
                 print("保存配置失败:", e)
+            self._refresh_list()
+
+    def _on_skill_deleted(self, skill):
+        # 找到当前 profile 并删除匹配项（按对象或 name/key/delay）
+        profile_name = getattr(self, "current_profile", None) or next(iter(getattr(self, "profiles", {})), None)
+        if not profile_name:
+            return
+        skills = self.profiles.get(profile_name, [])
+        removed = False
+        for i, s in enumerate(skills):
+            # 匹配逻辑：对象相同或关键字段相同
+            if s is skill or (isinstance(s, dict) and isinstance(skill, dict) and s.get("name")==skill.get("name") and s.get("key")==skill.get("key") and str(s.get("delay"))==str(skill.get("delay"))):
+                del skills[i]
+                removed = True
+                break
+        # 如果被删除，持久化并刷新 UI
+        if removed:
+            try:
+                from core.config import save_config
+                save_config("config.json", self.global_coords, self.profiles)
+            except Exception as e:
+                print("保存配置失败:", e)
+            self._refresh_list()
+
+    def _on_skill_selected(self, skill, card_widget):
+        # 管理单选：取消之前选中卡的高亮并设置当前卡高亮
+        prev = getattr(self, "_selected_card_widget", None)
+        if prev and hasattr(prev, "set_selected"):
+            try:
+                prev.set_selected(False)
+            except Exception:
+                pass
+        self._selected_card_widget = card_widget
+        self._selected_skill = skill
+        if card_widget and hasattr(card_widget, "set_selected"):
+            try:
+                card_widget.set_selected(True)
+            except Exception:
+                pass
+
+    def _on_global_delete(self):
+        # 删除当前选中的技能（如果有）
+        skill = getattr(self, "_selected_skill", None)
+        if not skill:
+            # 可选：弹出提示对话框或静默返回
+            print("未选择技能，无法删除。")
+            return
+
+        # 找到当前 profile
+        profile_name = getattr(self, "current_profile", None) or next(iter(getattr(self, "profiles", {})), None)
+        if not profile_name:
+            return
+
+        skills = self.profiles.get(profile_name, [])
+        removed = False
+        for i, s in enumerate(skills):
+            # 匹配：对象相同或按 name/key/delay 匹配
+            if s is skill or (isinstance(s, dict) and isinstance(skill, dict) and s.get("name")==skill.get("name") and s.get("key")==skill.get("key") and str(s.get("delay"))==str(skill.get("delay"))):
+                del skills[i]
+                removed = True
+                break
+
+        if removed:
+            try:
+                from core.config import save_config
+                save_config("config.json", self.global_coords, self.profiles)
+            except Exception as e:
+                print("保存配置失败:", e)
+            # 清除选择引用并刷新
+            self._selected_skill = None
+            if hasattr(self, "_selected_card_widget") and self._selected_card_widget:
+                try:
+                    self._selected_card_widget.set_selected(False)
+                except Exception:
+                    pass
+                self._selected_card_widget = None
             self._refresh_list()

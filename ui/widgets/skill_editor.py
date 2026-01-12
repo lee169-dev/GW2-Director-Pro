@@ -2,6 +2,7 @@
 from PySide6 import QtWidgets
 from PySide6.QtWidgets import QDialog, QLabel, QLineEdit, QPushButton, QHBoxLayout, QVBoxLayout, QFormLayout
 from PySide6.QtCore import Qt
+from ui.constants import PLACEHOLDER_NAME, PLACEHOLDER_KEY, PLACEHOLDER_DELAY, BTN_SAVE, BTN_CANCEL
 
 class SkillEditor(QDialog):
     """
@@ -19,14 +20,17 @@ class SkillEditor(QDialog):
         self.input_name = QLineEdit()
         self.input_key = QLineEdit()
         self.input_delay = QLineEdit()
+        self.input_name.setPlaceholderText(PLACEHOLDER_NAME)
+        self.input_key.setPlaceholderText(PLACEHOLDER_KEY)
+        self.input_delay.setPlaceholderText(PLACEHOLDER_DELAY)
 
         form = QFormLayout()
-        form.addRow("Name:", self.input_name)
-        form.addRow("Key:", self.input_key)
-        form.addRow("Delay(ms):", self.input_delay)
+        form.addRow("名称:", self.input_name)            # Name -> 名称
+        form.addRow("按键:", self.input_key)            # Key -> 按键
+        form.addRow("延迟（毫秒）:", self.input_delay)  # Delay -> 延迟（毫秒）
 
-        btn_save = QPushButton("Save")
-        btn_cancel = QPushButton("Cancel")
+        btn_save = QPushButton(BTN_SAVE)   # Save -> 保存
+        btn_cancel = QPushButton(BTN_CANCEL) # Cancel -> 取消
         btn_save.clicked.connect(self._on_save)
         btn_cancel.clicked.connect(self.reject)
 
