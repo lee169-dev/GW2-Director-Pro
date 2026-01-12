@@ -6,10 +6,8 @@ import pydirectinput
 import keyboard
 from PIL import ImageGrab
 
-# 修正导入路径
 from core.models.skill import SkillAction, SkillState
 from core.config import load_config, save_config
-# 接入真实的判断逻辑和校准逻辑
 from core.engine.evaluator import evaluate_skill
 from core.engine.calibration import calibrate
 
@@ -21,12 +19,15 @@ class Engine:
         on_status: Optional[Callable[[bool], None]] = None,
         on_overlay: Optional[Callable[[str, str], None]] = None,
         on_snapshot: Optional[Callable[[List[Dict]], None]] = None,
+        # 【新增】坐标更新回调
+        on_coords_update: Optional[Callable[[Dict], None]] = None, 
     ):
         self.config_path = config_path
         self.on_log = on_log or (lambda msg: None)
         self.on_status = on_status or (lambda running: None)
         self.on_overlay = on_overlay or (lambda t, c: None)
         self.on_snapshot = on_snapshot or (lambda d: None)
+        self.on_coords_update = on_coords_update or (lambda d: None)
 
         self.running = False
         self.current_profile = "Guardian - Dragonhunter"
@@ -41,7 +42,9 @@ class Engine:
             if pd:
                 self.profiles_data.update(pd)
                 self.current_profile = next(iter(self.profiles_data.keys()))
-            self.on_log("核心引擎已就绪 (v2.0 Pro)")
+            self.on_log("核心引擎已就绪 (v3.0 Apple UI)")
+            # 启动时推送一次坐标给 UI
+            self.on_coords_update(self.global_coords)
         except Exception as e:
             self.on_log(f"Load Error: {e}")
 
@@ -52,6 +55,7 @@ class Engine:
         except Exception as e:
             self.on_log(f"保存失败: {e}")
 
+    # --- 数据操作 ---
     def set_profile(self, profile: str):
         if profile == self.current_profile: return
         self.current_profile = profile
@@ -64,12 +68,11 @@ class Engine:
 
     def add_skill(self, name: str, key: str, delay: int):
         skill = SkillAction(name, key.upper(), delay)
-        # 尝试自动填入坐标
+        # 自动填入坐标
         if skill.key in self.global_coords:
             gc = self.global_coords[skill.key]
             skill.cx, skill.cy = gc['cx'], gc['cy']
             skill.p11x, skill.p11y = gc['p11x'], gc['p11y']
-            # 自动取色
             try:
                 grab = ImageGrab.grab()
                 skill.cr = grab.getpixel((skill.cx, skill.cy))
@@ -86,19 +89,24 @@ class Engine:
             skills.pop(idx)
             self.save()
 
+    # --- 校准逻辑 ---
     def start_calibration(self):
         threading.Thread(target=self._calibration_wizard, daemon=True).start()
 
     def _calibration_wizard(self):
         try:
             self.on_log(">>> 开始校准程序")
-            # 调用 calibration.py 里的逻辑
-            calibrate(self.global_coords, self.on_log)
-            self.on_overlay("校准完成", "#00ff00")
+            calibrate(self.global_coords, self.on_log, self.on_overlay)
+            
+            self.on_overlay("校准完成", "#30D158")
             self.save()
+            # 【新增】校准完，推送到 UI
+            self.on_coords_update(self.global_coords)
+            
         except Exception as e:
             self.on_log(f"校准中断: {e}")
 
+    # --- 战斗循环 ---
     def start(self):
         if self.running: return
         self.running = True
@@ -108,7 +116,7 @@ class Engine:
     def stop(self):
         self.running = False
         self.on_status(False)
-        self.on_overlay("READY", "#00ff00")
+        self.on_overlay("READY", "#30D158")
 
     def toggle(self):
         self.stop() if self.running else self.start()
@@ -119,18 +127,13 @@ class Engine:
             if not skills:
                 time.sleep(0.5); continue
             
-            # --- 1. 状态评估 (调用 evaluator.py) ---
             for s in skills:
-                # 这一步会更新 s.runtime.state
                 s.runtime.state = evaluate_skill(s)
             
-            # 通知 UI 刷新 (发送空列表即可，因为 UI 会直接读对象)
             self.on_snapshot([]) 
 
-            # --- 2. 执行逻辑 ---
             for s in skills:
                 if not self.running: break
-                
                 if s.runtime.state == SkillState.READY:
                     self.on_overlay(f"CAST: {s.name}", "#00ffff")
                     pydirectinput.press(s.key.lower())

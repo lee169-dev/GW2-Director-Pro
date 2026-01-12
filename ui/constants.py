@@ -1,32 +1,23 @@
-﻿# ui/constants.py
-"""
-UI 中文常量集中管理
-原则：
-- UI 中不允许出现硬编码英文
-- 状态 / 颜色 / 文案统一在这里维护
-"""
+﻿# -*- coding: utf-8 -*-
 
-from core.models.skill import SkillState
-
-# ===== 应用级 =====
+# ===== 应用 =====
 APP_TITLE = "GW2 Director Pro"
-APP_SUBTITLE = "激战 2 自动化控制台"
 
-# ===== 技能状态 =====
-SKILL_STATE_TEXT = {
-    SkillState.READY: "可释放",
-    SkillState.COOLDOWN: "冷却中",
-    SkillState.FAIL: "不可用",
-}
+# ===== 按钮文本 =====
+BTN_ADD = "添加"
+BTN_DELETE = "删除"
+BTN_START = "启动"
+BTN_STOP = "停止"
+BTN_CALIBRATE = "开始校准"
 
-SKILL_STATE_COLOR = {
-    SkillState.READY: "#30D158",     # 绿色
-    SkillState.COOLDOWN: "#8E8E93",  # 灰色
-    SkillState.FAIL: "#FF453A",      # 红色
-}
+# ===== 状态文本 =====
+STATUS_READY = "待命"
+STATUS_RUNNING = "运行中"
+STATUS_COOLDOWN = "冷却中"
+STATUS_FAIL = "不可用"
 
-# ===== 通用提示 =====
-TEXT_NO_SKILLS = "未配置技能"
-TEXT_READY = "待命中"
-TEXT_CASTING = "正在施放"
-TEXT_WAITING = "等待冷却"
+# ===== 状态颜色（Apple 语义色） =====
+COLOR_READY = "#34C759"      # 绿
+COLOR_COOLDOWN = "#FFD60A"   # 黄
+COLOR_FAIL = "#FF453A"       # 红
+COLOR_TEXT_SUB = "#8E8E93"

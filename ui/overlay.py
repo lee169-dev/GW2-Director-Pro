@@ -1,12 +1,8 @@
-﻿# ui/overlay.py
+﻿# -*- coding: utf-8 -*-
 from PySide6 import QtWidgets, QtCore
-from ui.constants import TEXT_READY
+from ui.constants import STATUS_READY
 
 class Overlay(QtWidgets.QWidget):
-    """
-    悬浮状态窗（显示当前运行状态）
-    """
-
     def __init__(self):
         super().__init__()
         self.setWindowFlags(
@@ -16,20 +12,22 @@ class Overlay(QtWidgets.QWidget):
         )
         self.setAttribute(QtCore.Qt.WA_TranslucentBackground)
 
-        self.label = QtWidgets.QLabel(TEXT_READY)
-        self.label.setStyleSheet(
-            "font-size: 16px; font-weight: bold; color: #30D158;"
-        )
+        self.label = QtWidgets.QLabel(STATUS_READY, self)
+        self.label.setStyleSheet("""
+            QLabel {
+                background-color: rgba(30, 30, 30, 180);
+                color: #EDEDED;
+                border-radius: 12px;
+                padding: 10px 18px;
+                font-size: 14px;
+                font-weight: 500;
+            }
+        """)
 
         layout = QtWidgets.QVBoxLayout(self)
-        layout.setContentsMargins(12, 8, 12, 8)
         layout.addWidget(self.label)
+        layout.setContentsMargins(0, 0, 0, 0)
 
-        self.resize(220, 40)
-        self.move(100, 100)
-
-    def set_text(self, text, color):
+    def set_text(self, text: str):
         self.label.setText(text)
-        self.label.setStyleSheet(
-            f"font-size: 16px; font-weight: bold; color: {color};"
-        )
+        self.adjustSize()
