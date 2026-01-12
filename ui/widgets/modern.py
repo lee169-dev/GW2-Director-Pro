@@ -37,11 +37,15 @@ class ModernButton(QtWidgets.QPushButton):
                 color: white;
                 border-radius: 10px;
                 border: none;
-                font-family: "Segoe UI", "Microsoft YaHei";
+                font-family: "Microsoft YaHei", "Segoe UI";
                 font-weight: 600;
                 font-size: 13px;
             }}
         """)
+        
+    def showEvent(self, event):
+        self._update_style()
+        super().showEvent(event)
 
     # 属性动画需要的 Property
     def get_color(self): return self.current_color
@@ -88,13 +92,21 @@ class CoordMonitor(QtWidgets.QScrollArea):
         self.rows = {}
 
     def update_data(self, global_coords):
-        # 清空旧数据
-        for i in reversed(range(self.layout.count()-1)): # 保留最后的弹簧
-            w = self.layout.itemAt(i).widget()
-            if w: w.setParent(None)
+        # 清空旧数据（保留最后的弹簧）
+        while self.layout.count() > 1:
+            item = self.layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
             
         self.rows.clear()
         
+        if not global_coords:
+            lbl = QtWidgets.QLabel("暂无校准数据")
+            lbl.setStyleSheet("color: #666; font-style: italic; margin-top: 10px;")
+            lbl.setAlignment(QtCore.Qt.AlignCenter)
+            self.layout.insertWidget(0, lbl)
+            return
+
         # 排序：1-9, 0, F1-F3
         keys = sorted(global_coords.keys(), key=lambda k: (len(k), k))
         
@@ -102,24 +114,20 @@ class CoordMonitor(QtWidgets.QScrollArea):
             data = global_coords[k]
             row = QtWidgets.QFrame()
             row.setStyleSheet("background-color: #252525; border-radius: 6px;")
-            row.setFixedHeight(28)
+            row.setFixedHeight(32)
             
             rl = QtWidgets.QHBoxLayout(row)
-            rl.setContentsMargins(8, 0, 8, 0)
+            rl.setContentsMargins(10, 0, 10, 0)
             
             # Key
             lbl_key = QtWidgets.QLabel(f"[{k}]")
             lbl_key.setFixedWidth(40)
-            lbl_key.setStyleSheet("color: #0A84FF; font-weight: bold;")
+            lbl_key.setStyleSheet("color: #0A84FF; font-weight: bold; font-family: Consolas;")
             
             # Coords
             cx, cy = data.get('cx', 0), data.get('cy', 0)
-            lbl_pos = QtWidgets.QLabel(f"{cx}, {cy}")
-            lbl_pos.setStyleSheet("color: #8E8E93; font-size: 11px;")
-            
-            # Color Box (这里我们简单显示个色块，如果有颜色数据的话)
-            # 这里的 engine 数据暂时没存颜色，只有坐标。
-            # 我们可以只显示 "Mapped" 文字或占位
+            lbl_pos = QtWidgets.QLabel(f"POS: {cx}, {cy}")
+            lbl_pos.setStyleSheet("color: #AAAAAA; font-size: 11px;")
             
             rl.addWidget(lbl_key)
             rl.addWidget(lbl_pos)

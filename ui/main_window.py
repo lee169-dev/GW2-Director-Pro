@@ -37,6 +37,37 @@ class MainWindow(QtWidgets.QMainWindow):
             on_overlay=self.on_overlay
         )
 
+        self._build_ui()
+
+    def _build_ui(self):
+        self.status_lbl = QtWidgets.QLabel(STATUS_READY)
+        self.status_lbl.setStyleSheet(f"color:{COLOR_TEXT_SUB};")
+
+        # 启动按钮
+        self.btn_start = QtWidgets.QPushButton(BTN_START)
+        self.btn_start.setObjectName("primary")
+        self.btn_start.clicked.connect(self.start)
+
+        # 停止按钮
+        self.btn_stop = QtWidgets.QPushButton(BTN_STOP)
+        self.btn_stop.setObjectName("danger")
+        self.btn_stop.clicked.connect(self.stop)
+
+        # 布局
+        layout = QtWidgets.QVBoxLayout()
+        layout.addWidget(self.status_lbl)
+        layout.addWidget(self.btn_start)
+        layout.addWidget(self.btn_stop)
+        self.setLayout(layout)
+
+    def start(self):
+        self.status_lbl.setText(STATUS_RUNNING)
+        self.overlay.set_text(STATUS_RUNNING)
+
+    def stop(self):
+        self.status_lbl.setText(STATUS_READY)
+        self.overlay.set_text(STATUS_READY)
+
     def set_skills(self, skills):
         self.skill_list.set_skills(skills, self.on_skill_selected)
         self.engine.set_skills(skills)

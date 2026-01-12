@@ -19,7 +19,7 @@ class Engine:
         on_status: Optional[Callable[[bool], None]] = None,
         on_overlay: Optional[Callable[[str, str], None]] = None,
         on_snapshot: Optional[Callable[[List[Dict]], None]] = None,
-        # 【新增】坐标更新回调
+        # 【关键】坐标更新回调
         on_coords_update: Optional[Callable[[Dict], None]] = None, 
     ):
         self.config_path = config_path
@@ -42,8 +42,8 @@ class Engine:
             if pd:
                 self.profiles_data.update(pd)
                 self.current_profile = next(iter(self.profiles_data.keys()))
-            self.on_log("核心引擎已就绪 (v3.0 Apple UI)")
-            # 启动时推送一次坐标给 UI
+            self.on_log("核心引擎已就绪 (v3.1)")
+            # 启动时推送一次坐标给 UI (用于恢复显示)
             self.on_coords_update(self.global_coords)
         except Exception as e:
             self.on_log(f"Load Error: {e}")
@@ -96,11 +96,12 @@ class Engine:
     def _calibration_wizard(self):
         try:
             self.on_log(">>> 开始校准程序")
+            # 传递 on_overlay 以显示校准提示
             calibrate(self.global_coords, self.on_log, self.on_overlay)
             
             self.on_overlay("校准完成", "#30D158")
             self.save()
-            # 【新增】校准完，推送到 UI
+            # 【关键】校准完，推送到 UI
             self.on_coords_update(self.global_coords)
             
         except Exception as e:
