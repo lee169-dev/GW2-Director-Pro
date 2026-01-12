@@ -1,34 +1,68 @@
 ﻿# ui/widgets/skill_editor.py
 from PySide6 import QtWidgets
+from PySide6.QtWidgets import QDialog, QLabel, QLineEdit, QPushButton, QHBoxLayout, QVBoxLayout, QFormLayout
+from PySide6.QtCore import Qt
 
-class SkillEditor(QtWidgets.QFrame):
+class SkillEditor(QDialog):
     """
     技能属性编辑面板
     注意：这里只做“展示 / 编辑”，不做逻辑判断
     """
 
-    def __init__(self):
-        super().__init__()
-        self.skill = None
-        self._build_ui()
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Edit Skill")
+        self.setModal(True)
+        self._init_ui()
 
-    def _build_ui(self):
-        self.setStyleSheet("background-color: #151515; border-radius: 10px;")
-        layout = QtWidgets.QFormLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
+    def _init_ui(self):
+        self.input_name = QLineEdit()
+        self.input_key = QLineEdit()
+        self.input_delay = QLineEdit()
 
-        self.edt_name = QtWidgets.QLineEdit()
-        self.edt_key = QtWidgets.QLineEdit()
-        self.spin_delay = QtWidgets.QSpinBox()
-        self.spin_delay.setRange(50, 5000)
+        form = QFormLayout()
+        form.addRow("Name:", self.input_name)
+        form.addRow("Key:", self.input_key)
+        form.addRow("Delay(ms):", self.input_delay)
 
-        layout.addRow("技能名称", self.edt_name)
-        layout.addRow("按键", self.edt_key)
-        layout.addRow("延迟（毫秒）", self.spin_delay)
+        btn_save = QPushButton("Save")
+        btn_cancel = QPushButton("Cancel")
+        btn_save.clicked.connect(self._on_save)
+        btn_cancel.clicked.connect(self.reject)
 
-    def bind(self, skill):
-        """绑定选中的技能"""
-        self.skill = skill
-        self.edt_name.setText(skill.name)
-        self.edt_key.setText(skill.key)
-        self.spin_delay.setValue(skill.delay)
+        h = QHBoxLayout()
+        h.addStretch()
+        h.addWidget(btn_save)
+        h.addWidget(btn_cancel)
+
+        v = QVBoxLayout(self)
+        v.addLayout(form)
+        v.addLayout(h)
+
+        self._save_cb = None
+        self._orig = None
+
+    def exec_for(self, skill, save_callback):
+        # 填充初始数据（支持 dict 或对象）
+        self._orig = skill
+        name = skill.get("name") if isinstance(skill, dict) else getattr(skill, "name", "")
+        key = skill.get("key") if isinstance(skill, dict) else getattr(skill, "key", "")
+        delay = skill.get("delay") if isinstance(skill, dict) else getattr(skill, "delay", "")
+        self.input_name.setText(str(name))
+        self.input_key.setText(str(key))
+        self.input_delay.setText(str(delay or "0"))
+        self._save_cb = save_callback
+        return self.exec_()
+
+    def _on_save(self):
+        if self._save_cb:
+            new_data = {
+                "name": self.input_name.text(),
+                "key": self.input_key.text(),
+                "delay": int(self.input_delay.text() or 0)
+            }
+            try:
+                self._save_cb(self._orig, new_data)
+            except Exception as e:
+                print("Save callback failed:", e)
+        self.accept()

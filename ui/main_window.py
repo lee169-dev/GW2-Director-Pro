@@ -2,15 +2,68 @@
 import threading
 import time
 from PySide6 import QtCore, QtWidgets, QtGui
+from PySide6.QtWidgets import QTextEdit, QLabel
 
 from core.engine.engine import Engine
 from ui.overlay import Overlay
 from ui.panels.skill_list import SkillListPanel
 from ui.widgets.skill_editor import SkillEditor
-# 引入丢失的现代组件和日志面板
-from ui.widgets.modern import ModernButton, CoordMonitor
-from ui.widgets.log_panel import LogPanel
-from ui.constants import *  # 引入汉化常量
+from core.config import save_config, load_config
+from core.models.skill import SkillAction
+
+# 尝试从 ui.constants 或 根模块 constants 导入配色与标题，若失败则使用回退值，避免 NameError
+try:
+    from ui.constants import COLOR_TEXT_SUB, APP_TITLE
+except Exception:
+    try:
+        from constants import COLOR_TEXT_SUB, APP_TITLE
+    except Exception:
+        COLOR_TEXT_SUB = "#9AA0A6"          # 次要文本颜色（回退）
+        APP_TITLE = "GW2 Director Pro"      # 窗口标题回退
+
+# 尝试导入 ModernButton 与相关常量，若缺失则提供回退实现以避免 NameError 崩溃
+try:
+	from ui.widgets.modern import ModernButton
+except Exception:
+	try:
+		from PySide6.QtWidgets import QPushButton
+	except Exception:
+		# 如果连 PySide6 也不可用，则定义一个最小占位类（极端情况）
+		class ModernButton:
+			def __init__(self, *args, **kwargs):
+				raise RuntimeError("ModernButton/unavailable")
+	else:
+		class ModernButton(QPushButton):
+			def __init__(self, text, color=None, hover_color=None, parent=None):
+				super().__init__(text, parent)
+				self.setObjectName("ModernButton")
+				# 简单样式以保持外观可用
+				if color:
+					self.setStyleSheet(f"background-color: {color}; color: #FFFFFF; border-radius: 8px; padding: 6px 14px;")
+				else:
+					self.setStyleSheet("background-color: #2C2C2E; color: #EDEDED; border-radius: 8px; padding: 6px 14px;")
+
+# 尝试导入按钮文本与颜色常量，若缺失则使用回退值
+try:
+    from ui.constants import (
+        BTN_CALIBRATE, BTN_START, BTN_VALIDATE, BTN_STOP,
+        COLOR_FAIL, COLOR_PRIMARY, COLOR_TEXT_SUB, APP_TITLE
+    )
+except Exception:
+    try:
+        from constants import (
+            BTN_CALIBRATE, BTN_START, BTN_VALIDATE, BTN_STOP,
+            COLOR_FAIL, COLOR_PRIMARY, COLOR_TEXT_SUB, APP_TITLE
+        )
+    except Exception:
+        BTN_CALIBRATE = "Calibrate"
+        BTN_START = "Start"
+        BTN_VALIDATE = "Validate"
+        BTN_STOP = "Stop"
+        COLOR_FAIL = "#FF453A"
+        COLOR_PRIMARY = "#0A84FF"
+        COLOR_TEXT_SUB = "#9AA0A6"
+        APP_TITLE = "GW2 Director Pro"
 
 class UiBridge(QtCore.QObject):
     """UI 线程桥接器"""
@@ -23,6 +76,7 @@ class UiBridge(QtCore.QObject):
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
+        # 使用已确保存在的 APP_TITLE 设置窗口标题
         self.setWindowTitle(f"{APP_TITLE} - Pro Edition")
         self.resize(1180, 800)
         
@@ -107,7 +161,26 @@ class MainWindow(QtWidgets.QMainWindow):
         lbl_monitor.setStyleSheet(f"color: {COLOR_TEXT_SUB}; font-size: 12px; font-weight: bold; letter-spacing: 1px;")
         left_l.addWidget(lbl_monitor)
         
-        self.coord_monitor = CoordMonitor()  # 使用 modern.py 里的组件
+        # 确保 coord_monitor 和 log_panel 至少有一个可用的实例（容错）
+        if not hasattr(self, "coord_monitor"):
+            try:
+                from ui.widgets.modern import CoordMonitor
+                self.coord_monitor = CoordMonitor()
+            except Exception:
+                # 轻量 fallback（不可用时不抛异常）
+                self.coord_monitor = QLabel("Coord Monitor")
+                self.coord_monitor.update_data = lambda data: None
+
+        if not hasattr(self, "log_panel"):
+            try:
+                from ui.widgets.log_panel import LogPanel
+                self.log_panel = LogPanel()
+            except Exception:
+                # 轻量 fallback：使用 QTextEdit 并提供 log() 方法
+                self.log_panel = QTextEdit()
+                self.log_panel.setReadOnly(True)
+                self.log_panel.log = lambda msg: self.log_panel.append(str(msg))
+
         left_l.addWidget(self.coord_monitor, 1)
 
         # ==========================
@@ -150,7 +223,7 @@ class MainWindow(QtWidgets.QMainWindow):
         splitter.addWidget(self.skill_list_panel)
         
         # 技能编辑器 (恢复显示)
-        self.skill_editor = SkillEditor()
+        self.skill_editor = SkillEditor(self)
         # 默认隐藏，选中技能后显示? 或者一直显示
         splitter.addWidget(self.skill_editor)
         splitter.setStretchFactor(0, 2)
@@ -176,9 +249,9 @@ class MainWindow(QtWidgets.QMainWindow):
         cl.addLayout(form)
         
         # 4. 日志区域 (恢复 LogPanel)
-        self.log_panel = LogPanel()
-        self.log_panel.setFixedHeight(120)
-        cl.addWidget(self.log_panel)
+        # self.log_panel = LogPanel()
+        # self.log_panel.setFixedHeight(120)
+        # cl.addWidget(self.log_panel)
         
         right_l.addWidget(content_area, 1)
 
@@ -189,7 +262,13 @@ class MainWindow(QtWidgets.QMainWindow):
     @QtCore.Slot(dict)
     def _update_coords_monitor(self, data):
         """引擎发来新的坐标数据 -> 刷新左侧列表"""
-        self.coord_monitor.update_data(data)
+        # 容错：若 coord_monitor 或 update_data 不存在则跳过
+        if hasattr(self, "coord_monitor") and hasattr(self.coord_monitor, "update_data"):
+            try:
+                self.coord_monitor.update_data(data)
+            except Exception:
+                pass
+        # else: 静默跳过避免抛错
 
     def _on_profile_changed(self, text):
         self.engine.set_profile(text)
@@ -220,7 +299,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def _refresh_list(self):
         skills = self.engine.get_current_skills()
         # 绑定点击事件：点击卡片 -> 编辑器显示
-        self.skill_list_panel.set_skills(skills, self.skill_editor.bind)
+        self.skill_list_panel.set_skills(skills, self._open_skill_editor)
 
     @QtCore.Slot(list)
     def _on_snapshot(self, _):
@@ -228,7 +307,14 @@ class MainWindow(QtWidgets.QMainWindow):
 
     @QtCore.Slot(str)
     def _append_log(self, msg): 
-        self.log_panel.log(msg)
+        # 容错：若 log_panel 或 log 方法不可用则回退为打印
+        if hasattr(self, "log_panel") and hasattr(self.log_panel, "log"):
+            try:
+                self.log_panel.log(msg)
+            except Exception:
+                print(str(msg))
+        else:
+            print(str(msg))
 
     @QtCore.Slot(bool)
     def _set_status(self, running):
@@ -257,3 +343,58 @@ class MainWindow(QtWidgets.QMainWindow):
         self.engine.save()
         self.overlay.close()
         super().closeEvent(e)
+
+    def _open_skill_editor(self, skill):
+        # 打开编辑器并在保存后回调 _on_skill_saved
+        self.skill_editor.exec_for(skill, lambda orig, new: self._on_skill_saved(orig, new))
+
+    def _on_skill_saved(self, original_skill, new_data):
+        # 确保有 profiles 与 current_profile
+        if not hasattr(self, "profiles") or not hasattr(self, "global_coords"):
+            gc, pr = load_config()
+            self.global_coords = gc
+            self.profiles = pr
+
+        profile_name = getattr(self, "current_profile", None) or next(iter(self.profiles), None)
+        if not profile_name:
+            return
+
+        skills = self.profiles.get(profile_name, [])
+        updated = False
+        for i, s in enumerate(skills):
+            # 匹配：对象相同或按 name/key/cx 匹配
+            match = False
+            if s is original_skill:
+                match = True
+            else:
+                if isinstance(s, SkillAction):
+                    if isinstance(original_skill, SkillAction):
+                        match = (s is original_skill)
+                    else:
+                        match = (s.name == original_skill.get("name") and str(s.key) == str(original_skill.get("key")))
+                else:
+                    # dict 情况
+                    if isinstance(original_skill, dict):
+                        match = (s.get("name") == original_skill.get("name") and s.get("key") == original_skill.get("key"))
+
+            if match:
+                # 更新字段
+                if isinstance(s, SkillAction):
+                    # 尝试直接设置属性
+                    for k, v in new_data.items():
+                        try:
+                            setattr(s, k, v)
+                        except Exception:
+                            pass
+                else:
+                    s.update(new_data)
+                updated = True
+                break
+
+        if updated:
+            # 持久化并刷新 UI
+            try:
+                save_config("config.json", self.global_coords, self.profiles)
+            except Exception as e:
+                print("保存配置失败:", e)
+            self._refresh_list()

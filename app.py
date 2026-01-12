@@ -1,10 +1,16 @@
 ﻿# -*- coding: utf-8 -*-
 import sys
+import os
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QFont
+from PySide6.QtCore import Qt, QCoreApplication
 from ui.main_window import MainWindow
 
 def main():
+    # 在创建 QApplication 之前设置高 DPI 选项，减少 SetProcessDpiAwarenessContext() 报错
+    os.environ.setdefault("QT_ENABLE_HIGHDPI_SCALING", "1")
+    QCoreApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+
     app = QApplication(sys.argv)
 
     # 全局字体：微软雅黑
