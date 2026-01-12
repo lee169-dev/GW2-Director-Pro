@@ -2,40 +2,46 @@
 import threading
 import time
 from PySide6 import QtCore, QtWidgets, QtGui
-from PySide6.QtWidgets import QTextEdit, QMenu, QAction, QLineEdit, QPushButton, QFrame, QHBoxLayout, QVBoxLayout, QMessageBox, QLabel
+from PySide6.QtWidgets import (
+    QTextEdit, QMenu, QLineEdit, QPushButton, QFrame,
+    QHBoxLayout, QVBoxLayout, QMessageBox, QLabel, QSplitter
+)
+from PySide6.QtGui import QAction, QFont, QColor
 from core.engine.engine import Engine
 from ui.overlay import Overlay
 from ui.panels.skill_list import SkillListPanel
 from ui.widgets.skill_editor import SkillEditor
 from core.config import save_config, load_config
 from core.models.skill import SkillAction
+
+# 统一从 ui.constants 导入 UI 文案与配色（简洁可维护）
 from ui.constants import (
     APP_TITLE, LABEL_ADD_SKILL, PLACEHOLDER_NAME, PLACEHOLDER_KEY, PLACEHOLDER_DELAY,
     BTN_ADD, BTN_EDIT, BTN_SAVE, BTN_CANCEL, BTN_START, BTN_STOP,
-    STATUS_READY, STATUS_RUNNING, COLOR_PRIMARY, COLOR_FAIL
+    STATUS_READY, STATUS_RUNNING, COLOR_PRIMARY, COLOR_FAIL, COLOR_TEXT_SUB
 )
 
 # 尝试导入 ModernButton 与相关常量，若缺失则提供回退实现以避免 NameError
 try:
-	from ui.widgets.modern import ModernButton
+    from ui.widgets.modern import ModernButton
 except Exception:
-	try:
-		from PySide6.QtWidgets import QPushButton
-	except Exception:
-		# 如果连 PySide6 也不可用，则定义一个最小占位类（极端情况）
-		class ModernButton:
-			def __init__(self, *args, **kwargs):
-				raise RuntimeError("ModernButton/unavailable")
-	else:
-		class ModernButton(QPushButton):
-			def __init__(self, text, color=None, hover_color=None, parent=None):
-				super().__init__(text, parent)
-				self.setObjectName("ModernButton")
-				# 简单样式以保持外观可用
-				if color:
-					self.setStyleSheet(f"background-color: {color}; color: #FFFFFF; border-radius: 8px; padding: 6px 14px;")
-				else:
-					self.setStyleSheet("background-color: #2C2C2E; color: #EDEDED; border-radius: 8px; padding: 6px 14px;")
+    try:
+        from PySide6.QtWidgets import QPushButton
+    except Exception:
+        # 如果连 PySide6 也不可用，则定义一个最小占位类（极端情况）
+        class ModernButton:
+            def __init__(self, *args, **kwargs):
+                raise RuntimeError("ModernButton/unavailable")
+    else:
+        class ModernButton(QPushButton):
+            def __init__(self, text, color=None, hover_color=None, parent=None):
+                super().__init__(text, parent)
+                self.setObjectName("ModernButton")
+                # 简单样式以保持外观可用
+                if color:
+                    self.setStyleSheet(f"background-color: {color}; color: #FFFFFF; border-radius: 8px; padding: 6px 14px;")
+                else:
+                    self.setStyleSheet("background-color: #2C2C2E; color: #EDEDED; border-radius: 8px; padding: 6px 14px;")
 
 class UiBridge(QtCore.QObject):
     """UI 线程桥接器"""
@@ -227,137 +233,127 @@ class MainWindow(QtWidgets.QMainWindow):
         
         right_l.addWidget(content_area, 1)
 
-        # --- 新增右下角 "新增技能" 面板（名称/按键/延迟 + 添加按钮） ---
-		self.add_panel = QFrame(self)
-		self.add_panel.setObjectName("addPanel")
-		add_layout = QHBoxLayout(self.add_panel)
-		add_layout.setContentsMargins(8, 6, 8, 6)
-		add_layout.setSpacing(8)
+        # --- 新增右下角 "新增技能" 面板（确保使用空格缩进） ---
+        self.add_panel = QFrame(self)
+        self.add_panel.setObjectName("addPanel")
+        add_layout = QHBoxLayout(self.add_panel)
+        add_layout.setContentsMargins(8, 6, 8, 6)
+        add_layout.setSpacing(8)
 
-		self.input_new_name = QLineEdit()
-		self.input_new_name.setPlaceholderText(PLACEHOLDER_NAME)
-		self.input_new_key = QLineEdit()
-		self.input_new_key.setPlaceholderText(PLACEHOLDER_KEY)
-		self.input_new_delay = QLineEdit()
-		self.input_new_delay.setPlaceholderText(PLACEHOLDER_DELAY)
+        self.input_new_name = QLineEdit()
+        self.input_new_name.setPlaceholderText(PLACEHOLDER_NAME)
+        self.input_new_key = QLineEdit()
+        self.input_new_key.setPlaceholderText(PLACEHOLDER_KEY)
+        self.input_new_delay = QLineEdit()
+        self.input_new_delay.setPlaceholderText(PLACEHOLDER_DELAY)
 
-		self.btn_add_skill = QPushButton(BTN_ADD)
-		self.btn_add_skill.setObjectName("btnAddSkill")
-		self.btn_add_skill.clicked.connect(self._on_add_skill)
+        self.btn_add_skill = QPushButton(BTN_ADD)
+        self.btn_add_skill.setObjectName("btnAddSkill")
+        self.btn_add_skill.clicked.connect(self._on_add_skill)
 
-		add_layout.addWidget(QLabel(LABEL_ADD_SKILL))
-		add_layout.addWidget(self.input_new_name)
-		add_layout.addWidget(self.input_new_key)
-		add_layout.addWidget(self.input_new_delay)
-		add_layout.addWidget(self.btn_add_skill)
+        add_layout.addWidget(QLabel(LABEL_ADD_SKILL))
+        add_layout.addWidget(self.input_new_name)
+        add_layout.addWidget(self.input_new_key)
+        add_layout.addWidget(self.input_new_delay)
+        add_layout.addWidget(self.btn_add_skill)
 
-		# 放置到窗口右下：优先尝试 statusBar（若为 QMainWindow），否则尝试加入主布局的末尾并靠右对齐
-		if hasattr(self, "statusBar"):
-			try:
-				self.statusBar().addPermanentWidget(self.add_panel)
-			except Exception:
-				try:
-					self.layout().addWidget(self.add_panel, alignment=Qt.AlignRight | Qt.AlignBottom)
-				except Exception:
-					self.add_panel.setParent(self)
-					self.add_panel.show()
-		else:
-			try:
-				self.layout().addWidget(self.add_panel, alignment=Qt.AlignRight | Qt.AlignBottom)
-			except Exception:
-				self.add_panel.setParent(self)
-				self.add_panel.show()
+        # 放置到窗口右下：优先尝试 statusBar（若为 QMainWindow），否则加入主布局末尾靠右
+        if hasattr(self, "statusBar"):
+            try:
+                self.statusBar().addPermanentWidget(self.add_panel)
+            except Exception:
+                try:
+                    self.layout().addWidget(self.add_panel, alignment=Qt.AlignRight | Qt.AlignBottom)
+                except Exception:
+                    self.add_panel.setParent(self)
+                    self.add_panel.show()
+        else:
+            try:
+                self.layout().addWidget(self.add_panel, alignment=Qt.AlignRight | Qt.AlignBottom)
+            except Exception:
+                self.add_panel.setParent(self)
+                self.add_panel.show()
 
-		# 右上区域会响应右键弹出新增菜单（本类统一处理 contextMenuEvent）
-		# ...existing code...
+        # 右上区域会响应右键弹出新增菜单（本类统一处理 contextMenuEvent）
+        # ...existing code...
 
-	# 右键菜单：当鼠标右键在窗口右上角区域时显示“新增技能”
-	def contextMenuEvent(self, event):
-		# 右上区域右键弹出菜单（新增技能）
-		pos = event.pos()
-		# 右上触发区域：宽度 - 380 到右边界，顶部 0..140
-		if pos.x() >= max(0, self.width() - 380) and pos.y() <= 140:
-			menu = QMenu(self)
-			act_add = QAction("新增技能", self)
-			act_add.triggered.connect(self._focus_add_skill_inputs)
-			menu.addAction(act_add)
-			menu.exec(event.globalPos())
-		else:
-			super().contextMenuEvent(event)
+    # 右键菜单：当鼠标右键在窗口右上角区域时显示“新增技能”
+    def contextMenuEvent(self, event):
+        # 右上区域右键弹出菜单（新增技能）
+        pos = event.pos()
+        # 右上触发区域：宽度 - 380 到右边界，顶部 0..140
+        if pos.x() >= max(0, self.width() - 380) and pos.y() <= 140:
+            menu = QMenu(self)
+            act_add = QAction(BTN_ADD, self)
+            act_add.triggered.connect(self._focus_add_skill_inputs)
+            menu.addAction(act_add)
+            menu.exec(event.globalPos())
+        else:
+            super().contextMenuEvent(event)
 
-	def _focus_add_skill_inputs(self):
-		# 把焦点移动到新增技能输入框，便于用户填写
-		try:
-			self.input_new_name.setFocus()
-			self.input_new_name.selectAll()
-		except Exception:
-			pass
+    def _focus_add_skill_inputs(self):
+        try:
+            self.input_new_name.setFocus()
+            self.input_new_name.selectAll()
+        except Exception:
+            pass
 
-	def _on_add_skill(self):
-		# 验证输入并将新技能加入当前 profile，持久化并刷新界面
-		name = (self.input_new_name.text() or "").strip()
-		key = (self.input_new_key.text() or "").strip()
-		delay_text = (self.input_new_delay.text() or "").strip()
+    def _on_add_skill(self):
+        name = (self.input_new_name.text() or "").strip()
+        key = (self.input_new_key.text() or "").strip()
+        delay_text = (self.input_new_delay.text() or "").strip()
 
-		if not name:
-			QMessageBox.warning(self, "错误", "请填写技能名称。")
-			return
-		if not key:
-			QMessageBox.warning(self, "错误", "请填写按键。")
-			return
-		try:
-			delay = int(delay_text or 0)
-		except ValueError:
-			QMessageBox.warning(self, "错误", "延迟需为整数（毫秒）。")
-			return
+        if not name:
+            QMessageBox.warning(self, "错误", "请填写技能名称。")
+            return
+        if not key:
+            QMessageBox.warning(self, "错误", "请填写按键。")
+            return
+        try:
+            delay = int(delay_text or 0)
+        except ValueError:
+            QMessageBox.warning(self, "错误", "延迟需为整数（毫秒）。")
+            return
 
-		# 确保加载了 profiles/global_coords
-		if not hasattr(self, "profiles") or not hasattr(self, "global_coords"):
-			gc, pr = load_config()
-			self.global_coords = gc
-			self.profiles = pr
+        # 确保加载了 profiles/global_coords
+        if not hasattr(self, "profiles") or not hasattr(self, "global_coords"):
+            gc, pr = load_config()
+            self.global_coords = gc
+            self.profiles = pr
 
-		profile_name = getattr(self, "current_profile", None) or next(iter(self.profiles), None)
-		if profile_name is None:
-			# 创建默认 profile
-			profile_name = "Default"
-			self.profiles[profile_name] = []
+        profile_name = getattr(self, "current_profile", None) or next(iter(self.profiles), None)
+        if profile_name is None:
+            profile_name = "Default"
+            self.profiles[profile_name] = []
 
-		# 构造 SkillAction 并追加
-		new_skill_data = {
-			"name": name,
-			"key": key,
-			"delay": delay,
-			"cx": 0,
-			"cy": 0,
-			"p11x": 0,
-			"p11y": 0
-		}
-		try:
-			s = SkillAction.from_dict(new_skill_data)
-		except Exception:
-			# 回退：如果 SkillAction.from_dict 不可用，保存为 dict
-			s = new_skill_data
+        new_skill_data = {
+            "name": name,
+            "key": key,
+            "delay": delay,
+            "cx": 0, "cy": 0, "p11x": 0, "p11y": 0
+        }
+        try:
+            s = SkillAction.from_dict(new_skill_data)
+        except Exception:
+            s = new_skill_data
 
-		self.profiles.setdefault(profile_name, []).append(s)
+        self.profiles.setdefault(profile_name, []).append(s)
 
-		# 持久化
-		try:
-			save_config("config.json", self.global_coords, self.profiles)
-		except Exception as e:
-			print("保存配置失败:", e)
-			QMessageBox.warning(self, "错误", "保存配置失败，请检查日志。")
-			return
+        try:
+            save_config("config.json", self.global_coords, self.profiles)
+        except Exception as e:
+            print("保存配置失败:", e)
+            QMessageBox.warning(self, "错误", "保存配置失败，请检查日志。")
+            return
 
-		# 清空输入，刷新列表，并给出提示
-		self.input_new_name.clear()
-		self.input_new_key.clear()
-		self.input_new_delay.clear()
-		QMessageBox.information(self, "已添加", f"已向配置文件 '{profile_name}' 添加技能：{name}")
-		try:
-			self._refresh_list()
-		except Exception:
-			pass
+        self.input_new_name.clear()
+        self.input_new_key.clear()
+        self.input_new_delay.clear()
+        QMessageBox.information(self, "已添加", f"已向配置文件 '{profile_name}' 添加技能：{name}")
+        try:
+            self._refresh_list()
+        except Exception:
+            pass
 
     # --- 逻辑控制 ---
     @QtCore.Slot(dict)

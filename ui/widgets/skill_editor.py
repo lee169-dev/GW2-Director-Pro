@@ -17,34 +17,30 @@ class SkillEditor(QDialog):
         self._init_ui()
 
     def _init_ui(self):
-        self.input_name = QLineEdit()
-        self.input_key = QLineEdit()
-        self.input_delay = QLineEdit()
-        self.input_name.setPlaceholderText(PLACEHOLDER_NAME)
-        self.input_key.setPlaceholderText(PLACEHOLDER_KEY)
-        self.input_delay.setPlaceholderText(PLACEHOLDER_DELAY)
+		self.input_name = QLineEdit()
+		self.input_key = QLineEdit()
+		self.input_delay = QLineEdit()
 
-        form = QFormLayout()
-        form.addRow("名称:", self.input_name)            # Name -> 名称
-        form.addRow("按键:", self.input_key)            # Key -> 按键
-        form.addRow("延迟（毫秒）:", self.input_delay)  # Delay -> 延迟（毫秒）
+		self.input_name.setPlaceholderText(PLACEHOLDER_NAME)
+		self.input_key.setPlaceholderText(PLACEHOLDER_KEY)
+		self.input_delay.setPlaceholderText(PLACEHOLDER_DELAY)
 
-        btn_save = QPushButton(BTN_SAVE)   # Save -> 保存
-        btn_cancel = QPushButton(BTN_CANCEL) # Cancel -> 取消
-        btn_save.clicked.connect(self._on_save)
-        btn_cancel.clicked.connect(self.reject)
+		btn_save = QPushButton(BTN_SAVE)
+		btn_cancel = QPushButton(BTN_CANCEL)
+		btn_save.clicked.connect(self._on_save)
+		btn_cancel.clicked.connect(self.reject)
 
-        h = QHBoxLayout()
-        h.addStretch()
-        h.addWidget(btn_save)
-        h.addWidget(btn_cancel)
+		h = QHBoxLayout()
+		h.addStretch()
+		h.addWidget(btn_save)
+		h.addWidget(btn_cancel)
 
-        v = QVBoxLayout(self)
-        v.addLayout(form)
-        v.addLayout(h)
+		v = QVBoxLayout(self)
+		v.addLayout(form)
+		v.addLayout(h)
 
-        self._save_cb = None
-        self._orig = None
+		self._save_cb = None
+		self._orig = None
 
     def exec_for(self, skill, save_callback):
         # 填充初始数据（支持 dict 或对象）

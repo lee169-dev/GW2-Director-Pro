@@ -45,11 +45,11 @@ class SkillCard(QtWidgets.QFrame):
         h.setSpacing(8)
 
         key = self.skill.get("key") if isinstance(self.skill, dict) else getattr(self.skill, "key", "")
-        self.lbl_key = QtWidgets.QLabel(f"按键：{str(key)}")
+        self.lbl_key = QLabel(f"按键：{str(key)}")
         self.lbl_key.setObjectName("skillKey")
         self.lbl_key.setStyleSheet("font-size:12px; color:#A8B0B6;")
-        # 允许换行并可扩展，避免显示不全
         self.lbl_key.setWordWrap(True)
+        # 允许换行并可扩展，避免显示不全
         self.lbl_key.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
         self.lbl_key.setMinimumWidth(40)
 
