@@ -6,27 +6,22 @@ class SkillListPanel(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
         self.cards = []
-
-        self.layout = QtWidgets.QVBoxLayout(self)
-        self.layout.setSpacing(10)
-        self.layout.setContentsMargins(10, 10, 10, 10)
-        self.layout.addStretch()
+        self.selected_skill_index = None  # 保存当前选中的技能索引
 
     def set_skills(self, skills, on_select):
         for c in self.cards:
             c.setParent(None)
         self.cards.clear()
 
-        for skill in skills:
+        for idx, skill in enumerate(skills):
             card = SkillCard(skill)
-            card.clicked.connect(on_select)
+            card.clicked.connect(lambda skill=skill: self.on_card_clicked(skill, idx))
             self.layout.insertWidget(self.layout.count() - 1, card)
             self.cards.append(card)
 
-    def refresh(self):
-        for c in self.cards:
-            if hasattr(c.skill, "runtime"):
-                c.update_state(
-                    c.skill.runtime.text,
-                    c.skill.runtime.color
-                )
+    def on_card_clicked(self, skill, idx):
+        self.selected_skill_index = idx  # 保存选中项的索引
+        # 可选：显示选中项的详细信息（如编辑框填充）
+    
+    def get_selected_skill_index(self):
+        return self.selected_skill_index
